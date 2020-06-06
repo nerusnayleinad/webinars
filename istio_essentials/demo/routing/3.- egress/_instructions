@@ -1,0 +1,303 @@
+This example shows how egress gateway behaves, and how we can use it to have one: defined point of exit from the 
+cluster. It can behave as NAT, for example.
+
+For this example, we will make the mesh policy to be RESTRICTED.
+
+root@v1-16-master:~# kubectl get cm istio -n istio-system -oyaml | grep ALLOW_ANY
+    # ALLOW_ANY - outbound traffic to unknown destinations will be allowed, in case there are no
+      mode: ALLOW_ANY #REGISTRY_ONLY
+      
+With this config (ALLOW_ANY), any requests can leave the mesh, by default. Nothing else needs to be done.
+
+/ # curl -sL -o /dev/null -D - http://edition.cnn.com/politics 2>/dev/null
+HTTP/1.1 301 Moved Permanently
+server: envoy
+retry-after: 0
+content-length: 0
+cache-control: public, max-age=600
+location: https://edition.cnn.com/politics
+accept-ranges: bytes
+date: Thu, 09 Jan 2020 11:03:24 GMT
+via: 1.1 varnish
+set-cookie: countryCode=US; Domain=.cnn.com; Path=/; SameSite=Lax
+set-cookie: geoData=mountain view|CA|94043|US|NA|-800|broadband; Domain=.cnn.com; Path=/; SameSite=Lax
+x-served-by: cache-cdg20762-CDG
+x-cache: HIT
+x-cache-hits: 0
+x-envoy-upstream-service-time: 12
+
+HTTP/1.1 200 OK
+Connection: keep-alive
+Content-Length: 1299024
+Content-Type: text/html; charset=utf-8
+x-servedByHost: ::ffff:127.0.0.1
+access-control-allow-origin: *
+cache-control: max-age=60
+content-security-policy: default-src 'self' blob: https://*.cnn.com:* http://*.cnn.com:* *.cnn.io:* *.cnn.net:* *.turner.com:* *.turner.io:* *.ugdturner.com:* courageousstudio.com *.vgtf.net:*; script-src 'unsafe-eval' 'unsafe-inline' 'self' *; style-src 'unsafe-inline' 'self' blob: *; child-src 'self' blob: *; frame-src 'self' *; object-src 'self' *; img-src 'self' data: blob: *; media-src 'self' data: blob: *; font-src 'self' data: *; connect-src 'self' *; frame-ancestors 'self' https://*.cnn.com:* http://*.cnn.com https://*.cnn.io:* http://*.cnn.io:* *.turner.com:* courageousstudio.com;
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+Via: 1.1 varnish
+Accept-Ranges: bytes
+Date: Thu, 09 Jan 2020 11:03:24 GMT
+Via: 1.1 varnish
+Age: 3
+Set-Cookie: countryCode=US; Domain=.cnn.com; Path=/; SameSite=Lax
+Set-Cookie: geoData=mountain view|CA|94043|US|NA|-800|broadband; Domain=.cnn.com; Path=/; SameSite=Lax
+Set-Cookie: tryThing01=6391; Domain=.cnn.com; Path=/; Expires=Sun Mar 01 2020 00:00:00 GMT; SameSite=Lax
+Set-Cookie: tryThing02=7965; Domain=.cnn.com; Path=/; Expires=Wed Jan 01 2020 00:00:00 GMT; SameSite=Lax
+X-Served-By: cache-iad2139-IAD, cache-cdg20775-CDG
+X-Cache: HIT, MISS
+X-Cache-Hits: 1, 0
+X-Timer: S1578567804.221004,VS0,VE262
+Vary: Accept-Encoding
+
+Note: we will change the value of the Configmap to REGISTRY_ONLY (that will force the 502 below),
+which will let requests to go out the mesh, only in case it has been defined in a Service Entry.
+
+$ kubectl get configmap istio -n istio-system -o yaml | sed 's/mode: REGISTRY_ONLY/mode: ALLOW_ANY/g' | kubectl replace -n istio-system -f -
+
+Note: It is different to have REGISTRY_ONLY in the `ConfigMap`, then to have mTLS enabled;
+mTLS will define if the traffic within the mesh is encrypted.
+RESITRY_ONLY defines who I can talk with (egress) from the mesh.
+
+/ # curl -sL -o /dev/null -D - http://edition.cnn.com/politics 2>/dev/null
+HTTP/1.1 502 Bad Gateway
+location: http://edition.cnn.com/politics
+date: Thu, 09 Jan 2020 11:03:22 GMT
+server: envoy
+content-length: 0
+
+Now, we need to open up a path through `ServiceEntry` object
+
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: cnn
+spec:
+  hosts:
+  - edition.cnn.com
+  ports:
+  - number: 80
+    name: http-port
+    protocol: HTTP
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+  
+This rule will allow any pod from the mesh to communicate with `edition.cnn.com` on ports 80 and 443.
+
+/ # curl -sL -o /dev/null -D - http://edition.cnn.com/politics 2>/dev/null
+HTTP/1.1 301 Moved Permanently
+server: envoy
+retry-after: 0
+content-length: 0
+cache-control: public, max-age=600
+location: https://edition.cnn.com/politics
+accept-ranges: bytes
+date: Thu, 09 Jan 2020 12:07:08 GMT
+via: 1.1 varnish
+set-cookie: countryCode=US; Domain=.cnn.com; Path=/; SameSite=Lax
+set-cookie: geoData=mountain view|CA|94043|US|NA|-800|broadband; Domain=.cnn.com; Path=/; SameSite=Lax
+x-served-by: cache-cdg20749-CDG
+x-cache: HIT
+x-cache-hits: 0
+x-envoy-upstream-service-time: 11
+
+HTTP/1.1 200 OK
+Connection: keep-alive
+Content-Length: 1297045
+Content-Type: text/html; charset=utf-8
+x-servedByHost: ::ffff:127.0.0.1
+access-control-allow-origin: *
+cache-control: max-age=60
+content-security-policy: default-src 'self' blob: https://*.cnn.com:* http://*.cnn.com:* *.cnn.io:* *.cnn.net:* *.turner.com:* *.turner.io:* *.ugdturner.com:* courageousstudio.com *.vgtf.net:*; script-src 'unsafe-eval' 'unsafe-inline' 'self' *; style-src 'unsafe-inline' 'self' blob: *; child-src 'self' blob: *; frame-src 'self' *; object-src 'self' *; img-src 'self' data: blob: *; media-src 'self' data: blob: *; font-src 'self' data: *; connect-src 'self' *; frame-ancestors 'self' https://*.cnn.com:* http://*.cnn.com https://*.cnn.io:* http://*.cnn.io:* *.turner.com:* courageousstudio.com;
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+Via: 1.1 varnish
+Accept-Ranges: bytes
+Date: Thu, 09 Jan 2020 12:07:08 GMT
+Via: 1.1 varnish
+Age: 266
+Set-Cookie: countryCode=US; Domain=.cnn.com; Path=/; SameSite=Lax
+Set-Cookie: geoData=mountain view|CA|94043|US|NA|-800|broadband; Domain=.cnn.com; Path=/; SameSite=Lax
+Set-Cookie: tryThing01=1816; Domain=.cnn.com; Path=/; Expires=Sun Mar 01 2020 00:00:00 GMT; SameSite=Lax
+Set-Cookie: tryThing02=0539; Domain=.cnn.com; Path=/; Expires=Wed Jan 01 2020 00:00:00 GMT; SameSite=Lax
+X-Served-By: cache-iad2132-IAD, cache-cdg20735-CDG
+X-Cache: HIT, HIT
+X-Cache-Hits: 1, 1
+X-Timer: S1578571628.418192,VS0,VE2
+Vary: Accept-Encoding
+
+Any other URL will fail
+
+/ # curl -sL -o /dev/null -D - http://cnn.com/politics 2>/dev/null
+HTTP/1.1 502 Bad Gateway
+location: http://cnn.com/politics
+date: Thu, 09 Jan 2020 12:08:50 GMT
+server: envoy
+content-length: 0
+
+/ # curl www.google.com -IL
+HTTP/1.1 502 Bad Gateway
+location: http://www.google.com/
+date: Thu, 09 Jan 2020 12:10:28 GMT
+server: envoy
+transfer-encoding: chunked
+
+NOTE: This way we instructed the proxies to be allowed to send requests to a URL that we defined in `ServiceEntry`
+object.
+
+--------------------------------------------------------------------------------
+
+We can also use `istio-egressgateway` as point of exit from the mesh. For this reason we need:
+
+0.- `ServiceEntry` object; to define what domain is allowed to talk to.
+
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: ack8storm-se
+spec:
+  hosts:
+  - ackstorm.com
+  ports:
+  - number: 80
+    name: http-port
+    protocol: HTTP
+  - number: 443
+    name: https
+    protocol: HTTPS
+  resolution: DNS
+
+1.- `Gateway` object; to let `istio-egressgateway` know to which hosts, on which ports to let the traffic flow.
+
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ack8storm-gw
+spec:
+  selector:
+    istio: egressgateway
+  servers:
+  - port:
+      number: 80
+      name: https
+      protocol: HTTPS
+    hosts:
+    - ackstorm.com
+    tls:                 # <- from here down can be omitted, if mTLS is disabled
+      mode: MUTUAL
+      serverCertificate: /etc/certs/cert-chain.pem
+      privateKey: /etc/certs/key.pem
+      caCertificates: /etc/certs/root-cert.pem
+
+2.- `VirtualService` object; to route the traffic from an envoy proxy to `istio-egressgateway`, so it will be
+routed to its destination.
+
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ack8storm-vs
+spec:
+  hosts:
+  - ackstorm.com
+  gateways:
+  - istio-egressgateway
+  - mesh
+  http:
+  - match:
+    - gateways:
+      - mesh
+      port: 80
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        subset: ack8storm
+        port:
+          number: 80
+      weight: 100
+  - match:
+    - gateways:
+      - istio-egressgateway
+      port: 80
+    route:
+    - destination:
+        host: ackstorm.com
+        port:
+          number: 80
+      weight: 100
+
+3.- `DestinationRule` object; to define subsets.
+
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: ack8storm-dr
+spec:
+  host: istio-egressgateway.istio-system.svc.cluster.local
+  subsets:
+  - name: ack8storm
+    trafficPolicy:
+      loadBalancer:
+        simple: ROUND_ROBIN
+      portLevelSettings:
+      - port:
+          number: 80
+        tls:
+          mode: ISTIO_MUTUAL
+          sni: ackstorm.com
+
+--------------------------------------------------------------------------------
+
+TESTING
+
+/ # curl -IL ackstorm.com
+HTTP/1.1 502 Bad Gateway
+location: http://ackstorm.com/
+date: Thu, 09 Jan 2020 14:32:35 GMT
+server: envoy
+transfer-encoding: chunked
+
+$ kubectl create -f serviceentry.yaml -f gateway.yaml -f virtualservice.yaml -f destinationrule.yaml -n istio
+serviceentry.networking.istio.io/ack8storm created
+gateway.networking.istio.io/ack8storm-gw created
+virtualservice.networking.istio.io/ack8storm-vs created
+destinationrule.networking.istio.io/ack8storm-dr created
+
+/ # curl -IL ackstorm.com
+HTTP/1.1 307 Temporary Redirect
+location: https://ackstorm.com:443/
+date: Thu, 09 Jan 2020 15:28:46 GMT
+content-length: 18
+content-type: text/plain; charset=utf-8
+x-envoy-upstream-service-time: 7
+server: envoy
+
+HTTP/1.1 301 Moved Permanently
+Cache-Control: max-age=3600
+Content-Type: text/html; charset=UTF-8
+Date: Thu, 09 Jan 2020 15:28:47 GMT
+Expires: Thu, 09 Jan 2020 16:28:47 GMT
+Location: https://www.ackstorm.com/
+Server: Apache/2.4.25 (Debian)
+Vary: Accept-Encoding,Cookie
+X-Powered-By: PHP/7.2.15
+X-Redirect-By: WordPress
+
+HTTP/1.1 200 OK
+Cache-Control: max-age=3, must-revalidate
+Content-Length: 21677
+Content-Type: text/html; charset=UTF-8
+Date: Thu, 09 Jan 2020 15:28:47 GMT
+Vary: Accept-Encoding,Cookie, X-Device, X-Vary-TCDN
+Age: 0
+TP-Cache: MISS
+Accept-Ranges: bytes
+Connection: keep-alive
+
+
+Note: The logs from `istio-egressgateway` pod shows how the request went out through it.
+$ kubectl logs istio-egressgateway-5b6cbd4c96-nm9sn -n istio-system | tail 
+
+[2020-01-09T15:29:42.626Z] "HEAD / HTTP/2" 307 - "-" "-" 0 0 2 2 "192.168.49.10" "curl/7.59.0" "7f8e26ed-f961-9c48-beda-0b396b24ee5a" "ackstorm.com" "146.148.10.209:80" outbound|80||ackstorm.com - 192.168.113.173:80 192.168.49.10:37964 ackstorm.com -

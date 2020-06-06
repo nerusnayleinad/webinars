@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+ 
+namespace: dev
+ 
+patchesStrategicMerge:
+- deploy-nginx.yaml
+- hpa-nginx.yaml
+
+commonAnnotations:
+  env: dev
+
+configMapGenerator:
+- name: landing-page
+  files:
+    - landing.html
+
+resources:
+- ns.yaml
+- ../../base

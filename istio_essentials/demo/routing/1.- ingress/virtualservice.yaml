@@ -1,0 +1,32 @@
+# Note: VS only apply on the client side.
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: server-vs
+spec:
+  hosts:
+  - "ackstorm.domain.com"
+  gateways:
+  - my-gateway
+  http:
+  - match:
+    - headers:
+        end-user:
+          exact: ackstorm
+      uri:
+        prefix: /hola/
+    - uri:
+        prefix: /adios/
+    rewrite:
+      uri: /path1/
+    route:
+    - destination:
+        port:
+          number: 80 # can be omitted if it's the only port for reviews
+        host: server.istio.svc.cluster.local
+        subset: nginx
+      weight: 80
+    - destination:
+        host: server.istio.svc.cluster.local
+        subset: apache
+      weight: 20

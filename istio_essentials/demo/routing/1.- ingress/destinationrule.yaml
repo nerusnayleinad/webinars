@@ -1,0 +1,13 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: server-dr
+spec:
+  host: server.istio.svc.cluster.local
+  subsets:
+  - name: nginx
+    labels:
+      app: nginx
+  - name: apache
+    labels:
+      app: apache

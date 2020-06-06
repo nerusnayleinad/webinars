@@ -1,0 +1,33 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ack8storm-vs
+spec:
+  hosts:
+  - ackstorm.com
+  - www.ackstorm.com
+  gateways:
+  - ack8storm-gw
+  - mesh
+  http:
+  - match:
+    - gateways:
+      - mesh
+      port: 80
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        subset: ack8storm
+        port:
+          number: 80
+      weight: 100
+  - match:
+    - gateways:
+      - ack8storm-gw
+      port: 80
+    route:
+    - destination:
+        host: ackstorm.com
+        port:
+          number: 80
+      weight: 100

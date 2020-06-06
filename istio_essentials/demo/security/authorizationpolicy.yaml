@@ -1,0 +1,13 @@
+apiVersion: "security.istio.io/v1beta1"
+kind: "AuthorizationPolicy"
+metadata:
+  name: nginx-only-get
+  namespace: istio
+spec:
+  selector:
+    matchLabels:
+      run: nginx
+  rules:
+  - to:
+    - operation:
+        methods: ["GET"]

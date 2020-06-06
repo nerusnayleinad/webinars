@@ -1,0 +1,10 @@
+apiVersion: "networking.istio.io/v1alpha3"
+kind: "DestinationRule"
+metadata:
+  name: mtls-for-server
+  namespace: istio
+spec:
+  host: server
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL

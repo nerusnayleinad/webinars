@@ -1,0 +1,17 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: ServiceEntry
+metadata:
+  name: ack8storm-se-http
+spec:
+  hosts:
+  - ackstorm.com
+  - www.ackstorm.com
+  ports:
+  - number: 80
+    name: http-port
+    protocol: HTTP
+  - number: 443
+    name: https-port
+    protocol: HTTPS
+  resolution: DNS
+  location: MESH_EXTERNAL

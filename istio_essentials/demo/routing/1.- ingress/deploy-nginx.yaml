@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      role: server
+      app: nginx
+  template:
+    metadata:
+      labels:
+        role: server
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        ports:
+        - name: http
+          containerPort: 80
+        volumeMounts:
+        - name: configmap-landing
+          mountPath: /usr/share/nginx/html/path1
+      volumes:
+        - name: configmap-landing
+          configMap:
+            name: landing-page-nginx
+            items:
+            - key: index.html
+              path: index.html
