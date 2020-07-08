@@ -2,3 +2,5 @@ flux+kustomize/guide
 flux+kustomize/sozi/svg/
 istio_essentials/guide
 istio_essentials/sozi/svg/
+distributed_tracing/guide
+distributed_tracing/sozi/svg/

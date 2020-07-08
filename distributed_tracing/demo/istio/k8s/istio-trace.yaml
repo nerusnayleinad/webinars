@@ -1,0 +1,318 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-trace-1st-hop
+  labels:
+    trace: jaeger-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      trace: jaeger-1
+  template:
+    metadata:
+      labels:
+        trace: jaeger-1
+    spec:
+      containers:
+      - name: jaeger-trace
+        image: viejo/jaeger-trace:10
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_HOP
+          value: 'http://second-hop.istio.svc.cluster.local'
+        - name: DELAY
+          value: '5'
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: first-hop
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    trace: jaeger-1
+    
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-trace-2nd-hop
+  labels:
+    trace: jaeger-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      trace: jaeger-2
+  template:
+    metadata:
+      labels:
+        trace: jaeger-2
+    spec:
+      containers:
+      - name: jaeger-trace
+        image: viejo/jaeger-trace:10
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_HOP
+          value: 'http://third-hop.istio.svc.cluster.local'
+        - name: DELAY
+          value: '2'
+         
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: second-hop
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    trace: jaeger-2
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-trace-3rd-hop
+  labels:
+    trace: jaeger-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      trace: jaeger-3
+  template:
+    metadata:
+      labels:
+        trace: jaeger-3
+    spec:
+      containers:
+      - name: jaeger-trace
+        image: viejo/jaeger-trace:20
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_HOP
+          value: "http://fourth-hop-a.istio.svc.cluster.local http://fourth-hop-b.istio.svc.cluster.local"
+        - name: DELAY
+          value: '3'
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: third-hop
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    trace: jaeger-3
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-trace-4th-hop-a
+  labels:
+    trace: jaeger-4a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      trace: jaeger-4a
+  template:
+    metadata:
+      labels:
+        trace: jaeger-4a
+    spec:
+      containers:
+      - name: jaeger-trace
+        image: viejo/jaeger-trace:10
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_HOP
+          value: 'http://fifth-hop.istio.svc.cluster.local'
+        - name: DELAY
+          value: '1'
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: fourth-hop-a
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    trace: jaeger-4a
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-trace-4th-hop-b
+  labels:
+    trace: jaeger-4b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      trace: jaeger-4b
+  template:
+    metadata:
+      labels:
+        trace: jaeger-4b
+    spec:
+      containers:
+      - name: jaeger-trace
+        image: viejo/jaeger-trace:10
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_HOP
+          value: 'http://fifth-hop.istio.svc.cluster.local'
+        - name: DELAY
+          value: '2'
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: fourth-hop-b
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    trace: jaeger-4b
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-trace-5th-hop
+  labels:
+    trace: jaeger-5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      trace: jaeger-5
+  template:
+    metadata:
+      labels:
+        trace: jaeger-5
+    spec:
+      containers:
+      - name: jaeger-trace
+        image: viejo/jaeger-trace:10
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_HOP
+          value: 'http://nginx.istio.svc.cluster.local'
+        - name: DELAY
+          value: '5'
+          
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: fifth-hop
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    trace: jaeger-5
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: landing-nginx
+data:
+  index.html: "<h1>THIS IS AN ISTIO TRACING DEMO</h1>"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        ports:
+        - name: http
+          containerPort: 80
+        volumeMounts:
+        - name: configmap-landing
+          mountPath: /usr/share/nginx/html/
+      volumes:
+        - name: configmap-landing
+          configMap:
+            name: landing-nginx
+            items:
+            - key: index.html
+              path: index.html
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: nginx
